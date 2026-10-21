@@ -59,7 +59,8 @@ export class HackListClient {
       cacheDir: o.cacheDir === undefined ? (process.env.HACKLIST_CACHE_DIR ?? join(homedir(), ".cache", "hacklist-mcp")) : o.cacheDir,
       maxDetailFetches: o.maxDetailFetches ?? Number(process.env.HACKLIST_MAX_DETAIL_FETCHES ?? 260),
     };
-    this.fetchImpl = o.fetchImpl ?? fetch;
+    // Wrapped so it's never called with `this` = the client (Cloudflare Workers throw "Illegal invocation").
+    this.fetchImpl = o.fetchImpl ?? ((input, init) => fetch(input, init));
     this.log = o.log ?? ((m) => process.stderr.write(`[hacklist-mcp] ${m}\n`));
   }
 

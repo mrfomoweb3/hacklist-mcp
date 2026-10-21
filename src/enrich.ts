@@ -30,12 +30,14 @@ const FX: Record<string, number> = { usd: 1, usdc: 1, usdt: 1, dai: 1, eur: 1.08
 const SYMBOL: Record<string, string> = { $: "usd", "€": "eur", "£": "gbp", "₹": "inr", "₦": "ngn" };
 
 function toNumber(raw: string, suffix?: string): number {
-  // Handles 1,000,000 / 7,50,000 (Indian grouping) / 25k / 1.5M
+  // Handles 1,000,000 / 7,50,000 (Indian grouping) / 25k / 1.5M / ₹18 lakh / ₹1.5L / ₹2 crore
   let n = Number(raw.replace(/[,\s]/g, ""));
   const s = (suffix ?? "").toLowerCase();
   if (s === "k") n *= 1e3;
   else if (s === "m" || s === "mm" || s === "million") n *= 1e6;
   else if (s === "b" || s === "billion") n *= 1e9;
+  else if (/^(l|lakhs?|lacs?)$/.test(s)) n *= 1e5;
+  else if (/^(cr|crores?)$/.test(s)) n *= 1e7;
   return n;
 }
 
@@ -51,7 +53,7 @@ export function parsePrize(text: string | undefined): PrizeInfo {
   const amounts: Array<{ usd: number; ctx: string }> = [];
   // Judge cash vs credits per clause: "1st: 1,000 USDC; 2nd: 600 API credits" has a cash first prize.
   const clauses = t.split(/[;()+]|\bplus\b|\band\b(?= \$| up to)/i).map((c) => c.trim()).filter(Boolean);
-  const re = /([$€£₹₦])\s?(\d[\d,]*(?:\.\d+)?)\s?(k|m|mm|million|billion|b)?\b(?!\s*\/\s*(?:mo|month|yr|year))|(\d[\d,]*(?:\.\d+)?)\s?(k|m|million)?\s?(usdc|usdt|usd|dai|eur|gbp|inr|ngn|cad|aud|sgd|chf|jpy)\b|\b(usd|usdc|usdt)\s?(\d[\d,]*(?:\.\d+)?)/gi;
+  const re = /([$€£₹₦])\s?(\d[\d,]*(?:\.\d+)?)\s?(k|m|mm|million|billion|b|lakhs?|lacs?|l|crores?|cr)?\b(?!\s*\/\s*(?:mo|month|yr|year))|(\d[\d,]*(?:\.\d+)?)\s?(k|m|million)?\s?(usdc|usdt|usd|dai|eur|gbp|inr|ngn|cad|aud|sgd|chf|jpy)\b|\b(usd|usdc|usdt)\s?(\d[\d,]*(?:\.\d+)?)/gi;
   for (const clause of clauses) {
     let m: RegExpExecArray | null;
     re.lastIndex = 0;
@@ -190,7 +192,7 @@ function redFlags(o: RawOpportunity, prize: PrizeInfo, el: Eligibility): string[
   if (/deadline extended/i.test(o.description ?? "")) f.push("Deadline was extended (often a sign of low turnout, which can be good for odds)");
   if (/travel and accommodation not covered/i.test(o.description ?? "")) f.push("Travel not covered for the on-site phase");
   if (!o.verified && o.sources.some((s) => s !== "sitemap")) f.push("Not marked Verified on HackList");
-  return f;
+  return Array.from(new Set(f));
 }
 
 /* ------------------------------------------------------------------ */
@@ -240,7 +242,22 @@ function sameOrg(a: RawOpportunity, b: RawOpportunity): boolean {
 /* Enrich                                                               */
 /* ------------------------------------------------------------------ */
 
+const TRACKING_PARAM = /^(utm_.+|_gl|gclid|fbclid|msclkid|mc_cid|mc_eid|ref_feature|ref_medium|ref_content)$/i;
+
+/** Drops analytics/tracking query params so apply links are clean and compare equal. */
+export function cleanUrl(u: string | undefined): string | undefined {
+  if (!u) return u;
+  try {
+    const url = new URL(u);
+    for (const k of [...url.searchParams.keys()]) if (TRACKING_PARAM.test(k)) url.searchParams.delete(k);
+    return url.toString().replace(/\?$/, "");
+  } catch {
+    return u;
+  }
+}
+
 export function enrichAll(raws: RawOpportunity[], now = clock()): Opportunity[] {
+  raws = raws.map((r) => (r.applyUrl ? { ...r, applyUrl: cleanUrl(r.applyUrl) } : r));
   const dups = findDuplicates(raws);
   return raws.map((r) => {
     const prize = parsePrize(r.prizeText);
@@ -261,7 +278,21 @@ export function enrichAll(raws: RawOpportunity[], now = clock()): Opportunity[] 
   });
 }
 
-/** Pick one listing per duplicate group (the one with the richest data). */
+/** Eligibility traps found on any copy of an event apply to the event. */
+function mergeEligibility(group: Opportunity[]): Eligibility {
+  const [first, ...rest] = group.map((g) => g.eligibility);
+  return rest.reduce<Eligibility>((m, e) => ({
+    studentsOnly: m.studentsOnly || e.studentsOnly,
+    regionLocked: m.regionLocked ?? e.regionLocked,
+    inPersonRequired: m.inPersonRequired || e.inPersonRequired,
+    hybrid: m.hybrid || e.hybrid,
+    applicationGated: m.applicationGated || e.applicationGated,
+    partnerOnly: m.partnerOnly || e.partnerOnly,
+    teamSize: m.teamSize ?? e.teamSize,
+  }), first);
+}
+
+/** Pick one listing per duplicate group (the one with the richest data), keeping every copy's eligibility traps. */
 export function collapseDuplicates(items: Opportunity[]): Opportunity[] {
   const byId = new Map(items.map((o) => [o.id, o]));
   const done = new Set<string>();
@@ -272,7 +303,12 @@ export function collapseDuplicates(items: Opportunity[]): Opportunity[] {
     const group = [o, ...o.duplicateIds.map((id) => byId.get(id)).filter(Boolean) as Opportunity[]];
     group.forEach((g) => done.add(g.id));
     group.sort((a, b) => richness(b) - richness(a));
-    out.push(group[0]);
+    if (group.length === 1) {
+      out.push(group[0]);
+      continue;
+    }
+    const eligibility = mergeEligibility(group);
+    out.push({ ...group[0], eligibility, redFlags: redFlags(group[0], group[0].prize, eligibility) });
   }
   return out;
 }

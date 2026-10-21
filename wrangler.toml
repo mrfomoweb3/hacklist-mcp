@@ -1,0 +1,10 @@
+name = "hacklist-mcp"
+main = "src/worker.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+# Optional: require a bearer token on /mcp.
+#   npx wrangler secret put HACKLIST_MCP_TOKEN

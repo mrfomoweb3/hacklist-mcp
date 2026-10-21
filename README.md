@@ -94,6 +94,19 @@ docker run -p 3000:3000 hacklist-mcp
 
 Works as-is on Render, Railway, Fly.io or Cloud Run (all give you HTTPS). To keep it private, set `HACKLIST_MCP_TOKEN` and the server will require `Authorization: Bearer <token>`. Leave it unset for a public, no-auth connector.
 
+### Cloudflare Workers
+
+`src/worker.ts` serves the same endpoints without Express or a disk cache:
+
+```bash
+npx wrangler login
+npm run dev:worker                    # local, http://localhost:8787/mcp
+npm run deploy:worker                 # https://hacklist-mcp.<your-subdomain>.workers.dev/mcp
+npx wrangler secret put HACKLIST_MCP_TOKEN   # optional, same bearer-token behaviour
+```
+
+The HackList snapshot is cached per Worker instance, so a cold instance's first call re-fetches the feed (about 2s). If the free plan's 10ms CPU limit trips on cold starts (`Exceeded CPU Limit` in `npx wrangler tail`), move to Workers Paid.
+
 ## Check it's reading HackList correctly
 
 ```bash

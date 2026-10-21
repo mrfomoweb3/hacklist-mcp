@@ -8,7 +8,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { HackListClient } from "../src/client.js";
 import { registerTools } from "../src/tools.js";
 import { extractFlightObjects, flightToRaw, parseDetailPage, parseFeed, parseListingPage, parseSitemap, toIsoDate } from "../src/parse.js";
-import { enrichAll, parsePrize } from "../src/enrich.js";
+import { cleanUrl, collapseDuplicates, enrichAll, parsePrize } from "../src/enrich.js";
 import { CARDS, FEED_GRANT, detailHtml, fakeFetch, fakeFetchWithFeed, feedJson, homepageHtml, sitemapXml } from "./fixtures.js";
 
 /* ---------------- parsing ---------------- */
@@ -274,4 +274,34 @@ test("feed + include_closed pulls closed listings from the sitemap", async () =>
   const { call } = await connect("feed");
   const r = await call("search_opportunities", { query: "solana", include_closed: true });
   assert.equal(r.results[0].status, "closed");
+});
+
+test("prize parsing understands lakh and crore", () => {
+  const lakh = parsePrize("₹18 lakh cash (₹1.5L/₹1L/₹50k per track)");
+  assert.equal(lakh.usd, 21600, `₹18 lakh should be ~$21,600, got ${lakh.usd}`);
+  assert.equal(parsePrize("₹2 crore grant pool").usd, 240000);
+});
+
+test("tracking params are stripped from apply links", () => {
+  assert.equal(
+    cleanUrl("https://x.devpost.com/?ref_feature=challenge&ref_medium=discover&_gl=1*abc"),
+    "https://x.devpost.com/",
+  );
+  assert.equal(cleanUrl("https://events.run.world/events/octoberjam/?utm_source=chatgpt.com"), "https://events.run.world/events/octoberjam/");
+  assert.equal(cleanUrl("https://dorahacks.io/hackathon/2349/detail?tab=rules"), "https://dorahacks.io/hackathon/2349/detail?tab=rules");
+  const [o] = enrichAll([{ id: "a", kind: "hackathon", url: "https://hacklist.io/hackathon/a", title: "A", applyUrl: "https://a.io/?utm_campaign=x", sources: ["feed"] }]);
+  assert.equal(o.applyUrl, "https://a.io/");
+});
+
+test("collapsed duplicates keep eligibility traps from every copy", () => {
+  const base = { kind: "hackathon" as const, title: "AWS CDS Agentic AI Partner Hackathon", deadline: "2026-10-28", applyUrl: "https://aws-cds-partner.devpost.com/", verified: true, sources: ["feed"] };
+  const items = enrichAll([
+    { ...base, id: "rich", url: "https://hacklist.io/hackathon/rich", organizer: "Amazon Web Services (AWS)", prizeText: "$40,000 in cash", description: "Build agentic messaging with AWS Communication Developer Services across RCS, SMS and WhatsApp. ".repeat(4) },
+    { ...base, id: "thin", url: "https://hacklist.io/hackathon/thin", organizer: "AWS", prizeText: "$40,000 cash", description: "For AWS partners only." },
+  ]);
+  const [kept, ...rest] = collapseDuplicates(items);
+  assert.equal(rest.length, 0);
+  assert.equal(kept.id, "rich", "richest copy is kept");
+  assert.equal(kept.eligibility.partnerOnly, true, "partner-only trap from the thin copy survives");
+  assert.ok(kept.redFlags.includes("Restricted to company partners"));
 });
