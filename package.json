@@ -2,6 +2,7 @@
   "name": "hacklist-mcp",
   "version": "0.2.0",
   "description": "MCP server for HackList (hacklist.io): search AI & Web3 hackathons, grants and programs, see when they were listed, and rank the non-generic ones worth building for.",
+  "mcpName": "io.github.mrfomoweb3/hacklist-mcp",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc && chmod +x dist/index.js",
@@ -24,6 +25,14 @@
     "ai"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mrfomoweb3/hacklist-mcp.git"
+  },
+  "homepage": "https://github.com/mrfomoweb3/hacklist-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/mrfomoweb3/hacklist-mcp/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "cheerio": "^1.2.0",
