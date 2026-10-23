@@ -40,9 +40,35 @@ All tools are read-only.
 
 ## Install
 
-Requires Node 18.17+.
+### Claude and ChatGPT on the web (no install)
+
+A hosted server is live, so on claude.ai and chatgpt.com you only paste one URL:
+
+```
+https://hacklist-mcp.samuelsuccess234.workers.dev/mcp
+```
+
+**claude.ai** (also syncs to the Claude desktop and mobile apps)
+
+1. Open **Settings → Connectors** and click **Add custom connector**.
+2. Name: `HackList`. Remote MCP server URL: the URL above. Click **Add**.
+3. In a chat, open the tools menu next to the message box and make sure **HackList** is turned on.
+4. Ask: *"What hackathons are open right now?"* or *"What should I enter this month? I write Solidity and I'm in Nigeria."*
+
+**ChatGPT**
+
+1. Open **Settings → Apps & Connectors → Advanced settings** and turn on **Developer mode**.
+2. Back in **Apps & Connectors**, click **Create**.
+3. Name: `HackList`. MCP server URL: the URL above. Authentication: **No authentication**. Tick the box saying you trust this application, then click **Create**.
+4. In a chat, click **+**, choose **Developer mode**, enable **HackList**, and ask your question.
+
+ChatGPT's deep research uses the `search` and `fetch` tools; normal chats can call all of them.
+
+If you can't find the connector option, check your plan: Claude and ChatGPT decide which plans can add custom connectors, and that changes over time.
 
 ### Claude Desktop (local, stdio)
+
+Requires Node 18.17+.
 
 Add to `claude_desktop_config.json`:
 
@@ -57,11 +83,11 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-Before it's on npm, point at a local build instead: `"command": "node", "args": ["/absolute/path/to/hacklist-mcp/dist/index.js"]`.
-
 ### Claude Code
 
 ```bash
+claude mcp add --transport http hacklist https://hacklist-mcp.samuelsuccess234.workers.dev/mcp
+# or run it locally:
 claude mcp add hacklist -- npx -y hacklist-mcp
 ```
 
@@ -69,12 +95,9 @@ claude mcp add hacklist -- npx -y hacklist-mcp
 
 Same command: `npx -y hacklist-mcp`.
 
-### ChatGPT and claude.ai (remote connector)
+### Self-hosting the connector
 
-These need a public HTTPS URL, so deploy the HTTP mode (below) and add `https://your-host/mcp` as a custom connector:
-
-- **ChatGPT:** enable developer mode in Settings, then add a custom connector/app with your `/mcp` URL. ChatGPT uses the `search` and `fetch` tools for deep research and can call the rest in chat.
-- **claude.ai:** Settings → Connectors → add a custom connector with your `/mcp` URL.
+To run your own copy instead of the hosted URL, deploy the HTTP mode or the Cloudflare Worker (below) and use `https://your-host/mcp` in the steps above.
 
 ## Run the HTTP server
 
